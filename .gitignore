@@ -2,3 +2,5 @@
 ./pycache/
 *.pyc
 ./sounds/*
+ffmpeg/
+setup/__pycache__/

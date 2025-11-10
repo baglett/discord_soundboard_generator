@@ -38,14 +38,20 @@ class YouTubeToSound:
         # Check for local ffmpeg installation and configure pydub
         local_ffmpeg_dir = Path(__file__).parent / "ffmpeg"
         if local_ffmpeg_dir.exists():
+            # Add ffmpeg directory to PATH so pydub can find it
+            local_ffmpeg_dir_abs = local_ffmpeg_dir.absolute()
+            if str(local_ffmpeg_dir_abs) not in os.environ.get('PATH', ''):
+                os.environ['PATH'] = str(local_ffmpeg_dir_abs) + os.pathsep + os.environ.get('PATH', '')
+                print(f"Added ffmpeg directory to PATH: {local_ffmpeg_dir_abs}")
+
             # Set ffmpeg/ffprobe paths for pydub
             ffmpeg_path = local_ffmpeg_dir / "ffmpeg.exe"
             ffprobe_path = local_ffmpeg_dir / "ffprobe.exe"
             if ffmpeg_path.exists():
-                AudioSegment.converter = str(ffmpeg_path)
+                AudioSegment.converter = str(ffmpeg_path.absolute())
                 print(f"Set AudioSegment.converter to: {AudioSegment.converter}")
             if ffprobe_path.exists():
-                AudioSegment.ffprobe = str(ffprobe_path)
+                AudioSegment.ffprobe = str(ffprobe_path.absolute())
                 print(f"Set AudioSegment.ffprobe to: {AudioSegment.ffprobe}")
 
         # Initialize pygame mixer for audio playback
@@ -145,7 +151,8 @@ class YouTubeToSound:
         # Validate URL first
         self._validate_youtube_url(youtube_url)
 
-        output_path = str(self.output_dir / output_filename)
+        # Use absolute path for output to avoid path resolution issues
+        output_path = str((self.output_dir / output_filename).absolute())
 
         # Check for local ffmpeg installation first
         local_ffmpeg_dir = Path(__file__).parent / "ffmpeg"
@@ -165,7 +172,7 @@ class YouTubeToSound:
 
         # If local ffmpeg exists, use it
         if local_ffmpeg_dir.exists():
-            ydl_opts['ffmpeg_location'] = str(local_ffmpeg_dir)
+            ydl_opts['ffmpeg_location'] = str(local_ffmpeg_dir.absolute())
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
