@@ -11,7 +11,7 @@ from tkinter import messagebox
 
 # Import startup window and GUI
 from startup_window import StartupWindow, check_ffmpeg_with_progress
-from gui import SoundboardGUI
+from gui_wizard import SoundboardGUI
 
 
 def main():

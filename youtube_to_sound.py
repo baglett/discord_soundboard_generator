@@ -12,6 +12,8 @@ import yt_dlp
 from pydub import AudioSegment
 from pydub.playback import play
 import pygame
+from mutagen.mp3 import MP3
+from mutagen.id3 import ID3, COMM, TIT2, TPE1
 from discord_soundboard import SoundboardManager
 
 
@@ -133,13 +135,124 @@ class YouTubeToSound:
                 "Valid formats: youtube.com/watch?v=..., youtu.be/..., or youtube.com/shorts/..."
             )
 
-    def _download_audio(self, youtube_url: str, output_filename: str) -> str:
+    def _add_youtube_metadata(self, mp3_path: str, youtube_url: str, video_title: str = "") -> None:
         """
-        Download audio from YouTube video
+        Add YouTube URL and video info to MP3 metadata
+
+        Args:
+            mp3_path (str): Path to MP3 file
+            youtube_url (str): YouTube video URL
+            video_title (str): Video title (optional)
+        """
+        try:
+            # Load or create ID3 tag
+            try:
+                audio = MP3(mp3_path, ID3=ID3)
+                audio.add_tags()
+            except:
+                audio = MP3(mp3_path)
+
+            # Add YouTube URL as a comment
+            audio.tags.add(COMM(encoding=3, lang='eng', desc='youtube_url', text=youtube_url))
+
+            # Add video title if provided
+            if video_title:
+                audio.tags.add(TIT2(encoding=3, text=video_title))
+
+            audio.save()
+            print(f"✓ Added YouTube metadata to {mp3_path}")
+        except Exception as e:
+            print(f"Warning: Failed to add metadata to {mp3_path}: {e}")
+
+    def _get_youtube_url_from_metadata(self, mp3_path: str) -> Optional[str]:
+        """
+        Extract YouTube URL from MP3 metadata
+
+        Args:
+            mp3_path (str): Path to MP3 file
+
+        Returns:
+            Optional[str]: YouTube URL if found, None otherwise
+        """
+        try:
+            audio = MP3(mp3_path, ID3=ID3)
+
+            # Look for youtube_url comment
+            for frame in audio.tags.getall('COMM'):
+                if frame.desc == 'youtube_url':
+                    return frame.text[0] if frame.text else None
+
+            return None
+        except Exception as e:
+            return None
+
+    def find_existing_download(self, youtube_url: str) -> Optional[str]:
+        """
+        Search for an existing full download of a YouTube video by URL
+
+        Args:
+            youtube_url (str): YouTube video URL to search for
+
+        Returns:
+            Optional[str]: Path to existing MP3 file if found, None otherwise
+        """
+        # Search through all MP3 files in output directory
+        for mp3_file in self.output_dir.glob("*_full.mp3"):
+            stored_url = self._get_youtube_url_from_metadata(str(mp3_file))
+            if stored_url and stored_url.strip() == youtube_url.strip():
+                print(f"✓ Found existing download: {mp3_file.name}")
+                return str(mp3_file.absolute())
+
+        return None
+
+    def get_video_info(self, youtube_url: str) -> Dict[str, Any]:
+        """
+        Get video information without downloading
+
+        Args:
+            youtube_url (str): YouTube video URL
+
+        Returns:
+            Dict with 'duration' (in seconds), 'title', 'video_id', etc.
+
+        Raises:
+            ValueError: If URL is invalid
+            Exception: If info extraction fails
+        """
+        self._validate_youtube_url(youtube_url)
+
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+        }
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(youtube_url, download=False)
+
+                if info is None:
+                    raise Exception("No video information retrieved")
+
+                return {
+                    'duration': info.get('duration', 0),  # Duration in seconds
+                    'title': info.get('title', 'Unknown'),
+                    'video_id': info.get('id', ''),
+                    'thumbnail': info.get('thumbnail', ''),
+                    'uploader': info.get('uploader', 'Unknown'),
+                }
+
+        except Exception as e:
+            raise Exception(f"Failed to get video info: {str(e)}")
+
+    def _download_audio(self, youtube_url: str, output_filename: str, check_existing: bool = True) -> str:
+        """
+        Download audio from YouTube video (or reuse existing download)
 
         Args:
             youtube_url (str): YouTube video URL (must be a direct video link)
             output_filename (str): Filename for downloaded audio (without extension)
+            check_existing (bool): Check for existing downloads first (default: True)
 
         Returns:
             str: Path to downloaded audio file
@@ -150,6 +263,13 @@ class YouTubeToSound:
         """
         # Validate URL first
         self._validate_youtube_url(youtube_url)
+
+        # Check for existing download if requested
+        if check_existing and "_full" in output_filename:
+            existing_path = self.find_existing_download(youtube_url)
+            if existing_path:
+                print(f"✓ Reusing existing download (no need to re-download)")
+                return existing_path
 
         # Use absolute path for output to avoid path resolution issues
         output_path = str((self.output_dir / output_filename).absolute())
@@ -183,7 +303,8 @@ class YouTubeToSound:
                 if info is None:
                     raise Exception("No video information retrieved. The URL may be invalid or unavailable.")
 
-                print(f"Downloaded: {info.get('title', 'Unknown title')}")
+                video_title = info.get('title', 'Unknown title')
+                print(f"Downloaded: {video_title}")
 
             # yt-dlp adds .mp3 extension
             output_file = f"{output_path}.mp3"
@@ -192,6 +313,10 @@ class YouTubeToSound:
 
             # Give the system a moment to release file handles after yt-dlp finishes
             time.sleep(0.5)
+
+            # Add YouTube URL metadata to the file (for _full versions)
+            if "_full" in output_filename:
+                self._add_youtube_metadata(output_file, youtube_url, video_title)
 
             return output_file
 
@@ -386,12 +511,7 @@ class YouTubeToSound:
             print(f"Downloaded path: {downloaded_path}")
             print(f"Downloaded path exists: {os.path.exists(downloaded_path)}")
             print(f"Clipped filename: {clipped_filename}")
-            # Cleanup download if clipping fails
-            if os.path.exists(downloaded_path):
-                try:
-                    os.remove(downloaded_path)
-                except:
-                    pass  # Best effort cleanup
+            # Keep download for future reuse - don't clean up
             raise Exception(f"Clipping failed: {str(e)}\nDownloaded file: {downloaded_path}\nTarget clip file: {clipped_filename}\nDownloaded file exists: {os.path.exists(downloaded_path)}")
 
     def create_sound_from_youtube(
@@ -451,15 +571,9 @@ class YouTubeToSound:
                 clipped_filename
             )
         except Exception as e:
-            # Cleanup download if clipping fails
-            if os.path.exists(downloaded_path):
-                os.remove(downloaded_path)
+            # Don't cleanup - keep the full download for future reuse
             raise Exception(f"Clipping failed: {str(e)}")
-        finally:
-            # Always remove the full download
-            if os.path.exists(downloaded_path):
-                os.remove(downloaded_path)
-                print(f"Cleaned up temporary file: {downloaded_path}")
+        # Note: We keep the full download for reuse in future iterations
 
         # Create soundboard sound
         try:
@@ -651,13 +765,11 @@ class YouTubeToSound:
             traceback.print_exc()
             return None
         finally:
-            # Cleanup temporary files
-            if downloaded_path and os.path.exists(downloaded_path):
-                os.remove(downloaded_path)
-                print(f"Cleaned up: {downloaded_path}")
+            # Keep the _full download for reuse, only cleanup preview clips
             if clipped_path and os.path.exists(clipped_path):
                 os.remove(clipped_path)
-                print(f"Cleaned up: {clipped_path}")
+                print(f"Cleaned up preview clip: {clipped_path}")
+            # Note: Keeping _full download at: {downloaded_path}
 
     def interactive_create(self) -> Optional[Dict[str, Any]]:
         """

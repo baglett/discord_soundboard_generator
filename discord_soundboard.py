@@ -18,6 +18,14 @@ class SoundboardManager:
     for a Discord guild (server).
     """
 
+    # Soundboard slots by premium tier
+    SOUNDBOARD_SLOTS = {
+        0: 8,    # No boost
+        1: 24,   # Tier 1 (2 boosts)
+        2: 36,   # Tier 2 (7 boosts)
+        3: 48    # Tier 3 (14 boosts)
+    }
+
     def __init__(self, discord_auth: DiscordAuth):
         """
         Initialize the SoundboardManager
@@ -127,7 +135,15 @@ class SoundboardManager:
             guild_id (str): The Discord guild (server) ID
 
         Returns:
-            list[Dict[str, Any]]: List of soundboard sound objects
+            list[Dict[str, Any]]: List of soundboard sound objects with fields:
+                - sound_id: Unique sound ID
+                - name: Sound name (2-32 characters)
+                - volume: Volume level (0.0-1.0)
+                - emoji_id: Custom emoji ID (if set)
+                - emoji_name: Unicode emoji or emoji name
+                - guild_id: The guild this sound belongs to
+                - available: Whether the sound is available
+                - user: User object who created the sound
         """
         endpoint = f'/guilds/{guild_id}/soundboard-sounds'
         response = self.discord.get(endpoint)
@@ -136,7 +152,14 @@ class SoundboardManager:
             raise ValueError(f"Guild not found: {guild_id}")
 
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+
+        # Discord API returns {'items': [sounds]} structure
+        if isinstance(data, dict) and 'items' in data:
+            return data['items']
+
+        # Fallback if structure changes
+        return data if isinstance(data, list) else []
 
     def get_soundboard_sound(self, guild_id: str, sound_id: str) -> Dict[str, Any]:
         """
@@ -296,3 +319,43 @@ class SoundboardManager:
                 print(f"  - {filename}: {error}")
 
         return created_sounds
+
+    def get_guild_soundboard_info(self, guild_id: str) -> Dict[str, Any]:
+        """
+        Get soundboard information for a guild including tier and slot usage
+
+        Args:
+            guild_id (str): The Discord guild (server) ID
+
+        Returns:
+            Dict[str, Any]: Dictionary containing:
+                - premium_tier: Server boost level (0-3)
+                - premium_subscription_count: Number of boosts
+                - max_soundboard_slots: Maximum soundboard slots available
+                - current_sounds_count: Number of soundboard sounds currently in use
+                - available_slots: Number of available slots remaining
+                - guild_name: Name of the guild
+        """
+        # Get detailed guild information
+        guild_info = self.discord.get_guild(guild_id)
+
+        # Get current soundboard sounds
+        sounds = self.list_soundboard_sounds(guild_id)
+        current_count = len(sounds)
+
+        # Get tier information
+        premium_tier = guild_info.get('premium_tier', 0)
+        premium_subscription_count = guild_info.get('premium_subscription_count', 0)
+
+        # Calculate slots
+        max_slots = self.SOUNDBOARD_SLOTS.get(premium_tier, 8)
+        available_slots = max_slots - current_count
+
+        return {
+            'guild_name': guild_info.get('name', 'Unknown'),
+            'premium_tier': premium_tier,
+            'premium_subscription_count': premium_subscription_count,
+            'max_soundboard_slots': max_slots,
+            'current_sounds_count': current_count,
+            'available_slots': available_slots
+        }

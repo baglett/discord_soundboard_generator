@@ -152,3 +152,23 @@ class DiscordAuth:
         response = self.get('/users/@me/guilds')
         response.raise_for_status()
         return response.json()
+
+    def get_guild(self, guild_id: str) -> Dict[str, Any]:
+        """
+        Get detailed information about a specific guild
+
+        Args:
+            guild_id (str): The Discord guild (server) ID
+
+        Returns:
+            Dict[str, Any]: Guild object with detailed information including:
+                - premium_tier: Server boost level (0-3)
+                - premium_subscription_count: Number of boosts
+                - And other guild properties
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        response = self.get(f'/guilds/{guild_id}')
+        response.raise_for_status()
+        return response.json()
