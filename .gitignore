@@ -5,3 +5,11 @@ config.json
 ./sounds/*
 ffmpeg/
 setup/__pycache__/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec~
+
+# Distribution packages (keep the template but ignore timestamped builds)
+distributions/*/
