@@ -17,7 +17,7 @@ DIST_DIR := distributions
 BUILD_DIR := build
 PYINSTALLER_DIST := dist
 
-.PHONY: help build clean install test version
+.PHONY: help build clean install test version release
 
 help:
 	@echo "Discord Soundboard Generator - Build System"
@@ -28,6 +28,7 @@ help:
 	@echo "  make install     - Install dependencies"
 	@echo "  make version     - Show current version"
 	@echo "  make test        - Test the application"
+	@echo "  make release     - Create GitHub release with ZIP archive"
 	@echo ""
 
 build:
@@ -55,3 +56,6 @@ version:
 	else \
 		echo "$(DEFAULT_VERSION)"; \
 	fi
+
+release:
+	@$(PYTHON) -c "v = open('.version').read().strip(); import os; os.system(f'powershell Compress-Archive -Path distributions/DiscordSoundboardGenerator_v{v} -DestinationPath distributions/DiscordSoundboardGenerator_v{v}.zip -Force'); os.system(f'git tag -a v{v} -m \"Discord Soundboard Generator v{v}\"'); os.system(f'git push origin v{v}'); os.system(f'gh release create v{v} --title \"Discord Soundboard Generator v{v}\" --notes \"Release v{v}\" distributions/DiscordSoundboardGenerator_v{v}.zip')"
