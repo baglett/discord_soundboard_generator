@@ -13,3 +13,4 @@ dist/
 
 # Distribution packages (keep the template but ignore timestamped builds)
 distributions/*/
+distributions/*.zip
