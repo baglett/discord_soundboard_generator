@@ -4,6 +4,7 @@ yt-dlp>=2025.10.22
 pydub==0.25.1
 pygame==2.6.1
 audioop-lts==0.2.2
+Pillow>=10.0.0
 
 # Build dependencies
 pyinstaller>=6.16.0

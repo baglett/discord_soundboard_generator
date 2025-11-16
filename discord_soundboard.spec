@@ -47,6 +47,15 @@ datas += [('setup', 'setup')]
 # Add an empty sounds directory structure
 datas += [('sounds', 'sounds')]
 
+# Bundle FFmpeg binaries if they exist
+import os
+if os.path.exists('ffmpeg'):
+    if os.path.exists('ffmpeg/ffmpeg.exe'):
+        datas += [('ffmpeg/ffmpeg.exe', 'ffmpeg')]
+    if os.path.exists('ffmpeg/ffprobe.exe'):
+        datas += [('ffmpeg/ffprobe.exe', 'ffmpeg')]
+    print("INFO: FFmpeg binaries will be bundled with the executable")
+
 # Main analysis - collects all imports and dependencies
 a = Analysis(
     ['main.py'],

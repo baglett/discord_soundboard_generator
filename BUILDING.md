@@ -53,6 +53,9 @@ Build a new distributable executable with automatic version management.
 
 **What's included:**
 - `DiscordSoundboardGenerator/` - Executable and dependencies
+  - `DiscordSoundboardGenerator.exe` - Main application
+  - `_internal/ffmpeg/` - Bundled FFmpeg binaries (~190MB)
+  - `_internal/` - All Python dependencies
 - `README.md` - Full documentation
 - `sample.env` - Credentials template
 - `DISTRIBUTION_README.txt` - End-user quick start
@@ -302,12 +305,14 @@ PyInstaller builds take 1-3 minutes. This is normal.
 
 Subsequent builds use cached modules, so they're faster.
 
-### Executable is large (>10 MB)
+### Executable is large (~240 MB)
 
-Normal. The executable includes:
-- Python interpreter
-- All dependencies (pygame, yt-dlp, requests, etc.)
-- Tkinter GUI framework
+Normal. The distribution includes:
+- Python interpreter (~5 MB)
+- All dependencies (pygame, yt-dlp, requests, etc.) (~40 MB)
+- Tkinter GUI framework (~5 MB)
+- **FFmpeg binaries (~190 MB)** - Pre-bundled for immediate use
+- Total: ~243 MB uncompressed, ~80 MB when zipped
 
 ### Antivirus flags the executable
 

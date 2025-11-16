@@ -15,6 +15,7 @@ from discord_soundboard import SoundboardManager
 from youtube_to_sound import YouTubeToSound
 from config_manager import ConfigManager
 from settings_dialog import show_settings_dialog
+from emoji_picker import show_emoji_picker
 import pygame
 import traceback
 import time
@@ -94,7 +95,7 @@ class SoundboardGUI:
         self.root = root
         self.root.title("Discord Soundboard Generator")
         self.root.geometry("900x750")
-        self.root.minsize(800, 650)
+        self.root.minsize(750, 600)
 
         # Initialize config manager
         self.config_manager = ConfigManager()
@@ -114,8 +115,11 @@ class SoundboardGUI:
         # Audio state
         self.preview_audio_path = None
         self.downloaded_audio_path = None
-        self.source_mode = tk.StringVar(value="youtube")  # "youtube" or "local"
+        self.source_mode = tk.StringVar(value="online")  # "online" (YouTube/Instagram) or "local"
         self.selected_local_file = None
+        self.detected_platform = None  # "youtube" or "instagram"
+        self.instagram_carousel_items = []  # For multi-slide Instagram posts
+        self.selected_carousel_index = None  # Which slide user selected
 
         # Audio trim slider state (unified for both YouTube and local)
         self.audio_duration = 0.0  # Total duration in seconds
@@ -214,9 +218,49 @@ class SoundboardGUI:
         tab = ttk.Frame(self.notebook)
         self.notebook.add(tab, text="Create Sound")
 
+        # Create canvas for scrolling
+        canvas = tk.Canvas(tab, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(tab, orient="vertical", command=canvas.yview)
+
         # Main container with padding
-        container = ttk.Frame(tab, padding=20)
-        container.pack(fill=tk.BOTH, expand=True)
+        container = ttk.Frame(canvas, padding=20)
+
+        # Configure canvas
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.create_window((0, 0), window=container, anchor="nw")
+
+        # Pack canvas and scrollbar
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Update scroll region when container changes size
+        def on_container_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        container.bind("<Configure>", on_container_configure)
+
+        # Update canvas window width when canvas is resized
+        def on_canvas_configure(event):
+            canvas.itemconfig(canvas.find_withtag("all")[0], width=event.width)
+
+        canvas.bind("<Configure>", on_canvas_configure)
+
+        # Bind mousewheel scrolling
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+        # Only bind mousewheel when mouse is over the canvas
+        def bind_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+        def unbind_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+
+        canvas.bind("<Enter>", bind_mousewheel)
+        canvas.bind("<Leave>", unbind_mousewheel)
+
+        # Store canvas reference for cleanup
+        self.wizard_canvas = canvas
 
         # Create wizard step frames (we'll show/hide them)
         self.wizard_step1_frame = ttk.Frame(container)
@@ -250,28 +294,28 @@ class SoundboardGUI:
 
         row = 0
 
-        # Source mode selection (YouTube vs Local)
+        # Source mode selection (YouTube/Instagram vs Local)
         ttk.Label(content, text="Source:").grid(row=row, column=0, sticky=tk.W, pady=5)
         source_frame = ttk.Frame(content)
         source_frame.grid(row=row, column=1, columnspan=2, sticky=tk.W, pady=5, padx=(10, 0))
 
-        ttk.Radiobutton(source_frame, text="YouTube", variable=self.source_mode,
-                       value="youtube", command=self.on_step1_source_changed).pack(side=tk.LEFT, padx=(0, 20))
+        ttk.Radiobutton(source_frame, text="YouTube / Instagram", variable=self.source_mode,
+                       value="online", command=self.on_step1_source_changed).pack(side=tk.LEFT, padx=(0, 20))
         ttk.Radiobutton(source_frame, text="Local File", variable=self.source_mode,
                        value="local", command=self.on_step1_source_changed).pack(side=tk.LEFT)
 
         row += 1
 
-        # YouTube-specific fields
+        # Online source-specific fields (YouTube/Instagram)
         self.step1_youtube_frame = ttk.Frame(content)
         self.step1_youtube_frame.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=10)
 
-        ttk.Label(self.step1_youtube_frame, text="YouTube URL:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        ttk.Label(self.step1_youtube_frame, text="Video URL:").grid(row=0, column=0, sticky=tk.W, pady=5)
         self.step1_youtube_url_entry = ttk.Entry(self.step1_youtube_frame, width=50)
         self.step1_youtube_url_entry.grid(row=0, column=1, columnspan=2, sticky=tk.EW, pady=5, padx=(10, 0))
         self.step1_youtube_url_entry.insert(0, "https://www.youtube.com/watch?v=xvFZjo5PgG0")
 
-        hint_label = ttk.Label(self.step1_youtube_frame, text="Use direct video URL (youtube.com/watch?v=... or youtu.be/...)",
+        hint_label = ttk.Label(self.step1_youtube_frame, text="Paste YouTube or Instagram URL (video, reel, or post)",
                               font=('Arial', 8), foreground='gray')
         hint_label.grid(row=0, column=1, columnspan=2, sticky=tk.W, pady=(35, 0), padx=(10, 0))
 
@@ -370,8 +414,8 @@ class SoundboardGUI:
         self.step2_youtube_title_label = ttk.Label(video_info_container,
                                                     text="Video Title",
                                                     font=('Arial', 12, 'bold'),
-                                                    wraplength=600)
-        self.step2_youtube_title_label.pack(pady=(0, 10))
+                                                    wraplength=500)
+        self.step2_youtube_title_label.pack(pady=(0, 10), fill=tk.X)
 
         self.step2_youtube_duration_label = ttk.Label(video_info_container,
                                                        text="Duration: --",
@@ -383,7 +427,7 @@ class SoundboardGUI:
                  text="💡 Watch the video in your browser to find the perfect timestamp for your clip",
                  font=('Arial', 9),
                  foreground='#0066cc',
-                 wraplength=600).pack(pady=(0, 15))
+                 wraplength=500).pack(pady=(0, 15), fill=tk.X)
 
         # Browser button
         button_frame = ttk.Frame(video_info_container)
@@ -399,6 +443,30 @@ class SoundboardGUI:
                  text="(Opens at your current trim start position)",
                  font=('Arial', 8),
                  foreground='gray').pack(side=tk.LEFT, padx=5)
+
+        # Instagram Carousel Frame (only shown for Instagram carousels)
+        self.step2_instagram_carousel_frame = ttk.LabelFrame(content, text="Select Carousel Slide", padding=15)
+        # Don't grid it yet, will be shown when Instagram carousel is detected
+
+        carousel_info_container = ttk.Frame(self.step2_instagram_carousel_frame)
+        carousel_info_container.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(carousel_info_container,
+                 text="This post has multiple slides. Select which one to use:",
+                 font=('Arial', 10)).pack(pady=(0, 10))
+
+        # Scrollable frame for carousel items
+        carousel_canvas = tk.Canvas(carousel_info_container, height=150, highlightthickness=0)
+        carousel_scrollbar = ttk.Scrollbar(carousel_info_container, orient="horizontal", command=carousel_canvas.xview)
+        self.step2_carousel_items_frame = ttk.Frame(carousel_canvas)
+
+        carousel_canvas.configure(xscrollcommand=carousel_scrollbar.set)
+        carousel_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        carousel_canvas.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        carousel_canvas.create_window((0, 0), window=self.step2_carousel_items_frame, anchor="nw")
+
+        self.step2_carousel_items_frame.bind("<Configure>",
+            lambda e: carousel_canvas.configure(scrollregion=carousel_canvas.bbox("all")))
 
         row += 1
 
@@ -477,9 +545,21 @@ class SoundboardGUI:
 
         row += 1
 
+        # Emoji picker
         ttk.Label(content, text="Emoji (optional):").grid(row=row, column=0, sticky=tk.W, pady=5)
-        self.step2_emoji_entry = ttk.Entry(content, width=10)
-        self.step2_emoji_entry.grid(row=row, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+
+        emoji_frame = ttk.Frame(content)
+        emoji_frame.grid(row=row, column=1, columnspan=2, sticky=tk.W, pady=5, padx=(10, 0))
+
+        self.step2_selected_emoji = tk.StringVar(value="")
+        self.step2_emoji_display = ttk.Label(emoji_frame, textvariable=self.step2_selected_emoji,
+                                             font=('Segoe UI Emoji', 20), width=3)
+        self.step2_emoji_display.pack(side=tk.LEFT, padx=(0, 10))
+
+        ttk.Button(emoji_frame, text="Pick Emoji",
+                  command=self.step2_pick_emoji).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(emoji_frame, text="Clear",
+                  command=lambda: self.step2_selected_emoji.set("")).pack(side=tk.LEFT)
 
         row += 1
 
@@ -508,16 +588,20 @@ class SoundboardGUI:
             self.wizard_step1_frame.pack_forget()
             self.wizard_step2_frame.pack(fill=tk.BOTH, expand=True)
 
+        # Reset scroll position to top
+        if hasattr(self, 'wizard_canvas'):
+            self.wizard_canvas.yview_moveto(0)
+
     def on_step1_source_changed(self):
         """Handle source mode radio button change in step 1"""
         mode = self.source_mode.get()
 
-        if mode == "youtube":
-            # Show YouTube frame, hide local frame
+        if mode == "online":
+            # Show online source frame (YouTube/Instagram), hide local frame
             self.step1_youtube_frame.grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=10)
             self.step1_local_frame.grid_forget()
         else:  # local
-            # Hide YouTube frame, show local frame
+            # Hide online source frame, show local frame
             self.step1_youtube_frame.grid_forget()
             self.step1_local_frame.grid(row=1, column=0, columnspan=3, sticky=tk.NSEW, pady=10)
             # Load sounds from sounds folder
@@ -579,10 +663,22 @@ class SoundboardGUI:
             messagebox.showerror("Error", "Please enter a Discord Sound Name")
             return
 
-        if mode == "youtube":
-            youtube_url = self.step1_youtube_url_entry.get().strip()
-            if not youtube_url:
-                messagebox.showerror("Error", "Please enter a YouTube URL")
+        if mode == "online":
+            online_url = self.step1_youtube_url_entry.get().strip()
+            if not online_url:
+                messagebox.showerror("Error", "Please enter a video URL")
+                return
+
+            # Detect platform (YouTube or Instagram)
+            from instagram_scraper import InstagramScraper
+            instagram_scraper = InstagramScraper(None)  # Only need for URL detection
+            self.detected_platform = instagram_scraper.detect_url_platform(online_url)
+
+            if not self.detected_platform:
+                messagebox.showerror("Error",
+                    "URL not recognized. Please enter a valid YouTube or Instagram URL.\n\n" +
+                    "YouTube: youtube.com/watch?v=... or youtu.be/...\n" +
+                    "Instagram: instagram.com/p/... or instagram.com/reel/...")
                 return
         else:  # local
             if not self.selected_local_file:
@@ -602,11 +698,15 @@ class SoundboardGUI:
         self.show_wizard_step(1)
 
     def step2_load_audio_data(self):
-        """Load audio data for step 2 (YouTube or local file)"""
+        """Load audio data for step 2 (online or local file)"""
         mode = self.source_mode.get()
 
-        if mode == "youtube":
-            self.step2_load_youtube_info()
+        if mode == "online":
+            # Route based on detected platform
+            if self.detected_platform == "youtube":
+                self.step2_load_youtube_info()
+            elif self.detected_platform == "instagram":
+                self.step2_load_instagram_info()
         else:
             self.step2_load_local_audio_info()
 
@@ -679,9 +779,10 @@ class SoundboardGUI:
 
             except Exception as e:
                 error_msg = f"Failed to load video info: {str(e)}"
+                error_obj = e  # Capture in local scope
                 self.root.after(0, lambda: self.step2_audio_info_label.config(
                     text=error_msg, foreground='red'))
-                self.root.after(0, lambda: self.show_error("Video Load Error", error_msg, e))
+                self.root.after(0, lambda err=error_obj: self.show_error("Video Load Error", error_msg, err))
 
         thread = threading.Thread(target=load, daemon=True)
         thread.start()
@@ -707,6 +808,189 @@ class SoundboardGUI:
         start_seconds = int(self.trim_start.get())
         youtube_url = f"https://www.youtube.com/watch?v={self.youtube_video_id}&t={start_seconds}s"
         webbrowser.open(youtube_url)
+
+    def step2_load_instagram_info(self):
+        """Load Instagram post/reel information and setup carousel selector"""
+        def load():
+            try:
+                from instagram_scraper import InstagramScraper
+                from pydub import AudioSegment
+                import re
+
+                instagram_url = self.step1_youtube_url_entry.get().strip()
+                sound_name = self.step1_sound_name_entry.get().strip()
+
+                self.root.after(0, lambda: self.step2_audio_info_label.config(
+                    text="Loading Instagram post info...", foreground='blue'))
+
+                # Initialize Instagram scraper
+                ffmpeg_path = self.youtube_converter.ffmpeg_path if hasattr(self.youtube_converter, 'ffmpeg_path') else None
+                instagram_scraper = InstagramScraper(self.soundboard, ffmpeg_path)
+
+                # Get post info (includes carousel detection)
+                post_info = instagram_scraper.get_post_info(instagram_url)
+                self.instagram_carousel_items = post_info['items']
+
+                # If carousel with multiple items, show selector
+                if post_info['is_carousel'] and len(self.instagram_carousel_items) > 1:
+                    self.root.after(0, lambda: self.step2_audio_info_label.config(
+                        text=f"Found {len(self.instagram_carousel_items)} slides with audio. Select one below.",
+                        foreground='blue'))
+
+                    # Show carousel selector
+                    self.root.after(0, lambda: self.step2_show_instagram_carousel(instagram_url, sound_name))
+                else:
+                    # Single item, download directly
+                    if not self.instagram_carousel_items:
+                        raise Exception("No video with audio found in this post")
+
+                    self.selected_carousel_index = 0
+
+                    # Schedule download in a separate thread
+                    def download_single():
+                        self.step2_download_instagram_audio(instagram_url, sound_name, 0)
+
+                    download_thread = threading.Thread(target=download_single, daemon=True)
+                    self.root.after(0, download_thread.start)
+
+            except Exception as e:
+                error_msg = f"Failed to load Instagram post: {str(e)}"
+                error_obj = e  # Capture in local scope
+                self.root.after(0, lambda: self.step2_audio_info_label.config(
+                    text=error_msg, foreground='red'))
+                self.root.after(0, lambda err=error_obj: self.show_error("Instagram Load Error", error_msg, err))
+
+        thread = threading.Thread(target=load, daemon=True)
+        thread.start()
+
+    def step2_show_instagram_carousel(self, instagram_url, sound_name):
+        """Display carousel item selector with thumbnails"""
+        from PIL import Image, ImageTk
+        import urllib.request
+        from io import BytesIO
+
+        # Show carousel frame
+        self.step2_instagram_carousel_frame.grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=(0, 15))
+
+        # Clear existing items
+        for widget in self.step2_carousel_items_frame.winfo_children():
+            widget.destroy()
+
+        # Create thumbnail buttons for each item
+        for idx, item in enumerate(self.instagram_carousel_items):
+            item_frame = ttk.Frame(self.step2_carousel_items_frame, padding=5)
+            item_frame.pack(side=tk.LEFT, padx=5)
+
+            # Try to load thumbnail
+            thumbnail_label = None
+            if item['thumbnail']:
+                try:
+                    # Download thumbnail
+                    with urllib.request.urlopen(item['thumbnail']) as response:
+                        img_data = response.read()
+                    img = Image.open(BytesIO(img_data))
+
+                    # Resize to reasonable thumbnail size
+                    img.thumbnail((120, 120))
+                    photo = ImageTk.PhotoImage(img)
+
+                    thumbnail_label = ttk.Label(item_frame, image=photo, relief=tk.RAISED, borderwidth=2)
+                    thumbnail_label.image = photo  # Keep reference
+                    thumbnail_label.pack()
+                except Exception as e:
+                    print(f"Failed to load thumbnail {idx}: {e}")
+
+            # Item info
+            duration_text = f"{item['duration']:.1f}s" if item.get('duration') else "N/A"
+            info_text = f"Slide {idx + 1}\n{duration_text}"
+
+            ttk.Label(item_frame, text=info_text, font=('Arial', 9), justify=tk.CENTER).pack(pady=(5, 0))
+
+            # Select button
+            select_btn = ttk.Button(item_frame, text="Select",
+                                   command=lambda i=idx: self.step2_select_carousel_item(instagram_url, sound_name, i))
+            select_btn.pack(pady=(5, 0))
+
+    def step2_select_carousel_item(self, instagram_url, sound_name, index):
+        """User selected a carousel item"""
+        self.selected_carousel_index = index
+
+        # Hide carousel selector
+        self.step2_instagram_carousel_frame.grid_forget()
+
+        # Download audio for selected item
+        self.step2_audio_info_label.config(
+            text=f"Loading audio from slide {index + 1}...", foreground='blue')
+
+        # Download in background thread
+        thread = threading.Thread(
+            target=lambda: self.step2_download_instagram_audio(instagram_url, sound_name, index),
+            daemon=True)
+        thread.start()
+
+    def step2_download_instagram_audio(self, instagram_url, sound_name, carousel_index):
+        """Download Instagram audio and setup trim sliders"""
+        try:
+            from instagram_scraper import InstagramScraper
+            from pydub import AudioSegment
+            import re
+
+            # Initialize scraper
+            ffmpeg_path = self.youtube_converter.ffmpeg_path if hasattr(self.youtube_converter, 'ffmpeg_path') else None
+            instagram_scraper = InstagramScraper(self.soundboard, ffmpeg_path)
+
+            # Create safe filename
+            safe_filename = re.sub(r'[^\w\s-]', '', sound_name).strip().replace(' ', '_')
+
+            # Download audio
+            self.root.after(0, lambda: self.step2_audio_info_label.config(
+                text="Downloading audio...", foreground='blue'))
+
+            downloaded_path = instagram_scraper.download_audio(
+                instagram_url,
+                safe_filename,
+                carousel_index if len(self.instagram_carousel_items) > 1 else None
+            )
+
+            # Store path
+            self.downloaded_audio_path = downloaded_path
+            self.loaded_audio_path = downloaded_path
+
+            # Get actual duration
+            audio = AudioSegment.from_file(downloaded_path)
+            actual_duration_seconds = len(audio) / 1000.0
+            self.audio_duration = actual_duration_seconds
+
+            def update_ui():
+                # Update info label
+                self.step2_audio_info_label.config(
+                    text=f"✓ Audio loaded from Instagram ({actual_duration_seconds:.2f}s total)",
+                    foreground='green'
+                )
+
+                # Configure sliders
+                self.step2_start_slider.config(from_=0, to=actual_duration_seconds, state=tk.NORMAL)
+                self.step2_end_slider.config(from_=0, to=actual_duration_seconds, state=tk.NORMAL)
+
+                # Set initial values
+                initial_end = min(actual_duration_seconds, 5.2)
+                self.trim_start.set(0.0)
+                self.trim_end.set(initial_end)
+
+                # Update labels
+                self.step2_update_trim_labels()
+
+                # Enable generate preview button
+                self.step2_generate_preview_btn.config(state=tk.NORMAL)
+
+            self.root.after(0, update_ui)
+
+        except Exception as e:
+            error_msg = f"Failed to download Instagram audio: {str(e)}"
+            error_obj = e  # Capture in local scope
+            self.root.after(0, lambda: self.step2_audio_info_label.config(
+                text=error_msg, foreground='red'))
+            self.root.after(0, lambda err=error_obj: self.show_error("Instagram Download Error", error_msg, err))
 
     def step2_load_local_audio_info(self):
         """Load local audio file information and setup trim sliders"""
@@ -822,8 +1106,8 @@ class SoundboardGUI:
         """Generate preview clip based on trim slider selection"""
         mode = self.source_mode.get()
 
-        if mode == "youtube":
-            self.step2_generate_preview_youtube()
+        if mode == "online":
+            self.step2_generate_preview_youtube()  # Works for both YouTube and Instagram
         else:
             self.step2_generate_preview_local()
 
@@ -1036,6 +1320,14 @@ class SoundboardGUI:
         thread = threading.Thread(target=play, daemon=True)
         thread.start()
 
+    def step2_pick_emoji(self):
+        """Open emoji picker dialog"""
+        def on_emoji_selected(emoji):
+            if emoji:
+                self.step2_selected_emoji.set(emoji)
+
+        show_emoji_picker(self.root, on_emoji_selected)
+
     def step2_publish_sound(self):
         """Publish the sound to Discord"""
         if not self.preview_audio_path or not os.path.exists(self.preview_audio_path):
@@ -1059,7 +1351,7 @@ class SoundboardGUI:
             messagebox.showerror("Error", "Volume must be between 0.0 and 1.0")
             return
 
-        emoji_name = self.step2_emoji_entry.get().strip() or None
+        emoji_name = self.step2_selected_emoji.get().strip() or None
 
         def upload():
             try:
@@ -1129,7 +1421,7 @@ class SoundboardGUI:
         self.selected_local_file = None
 
         # Clear step 2 fields
-        self.step2_emoji_entry.delete(0, tk.END)
+        self.step2_selected_emoji.set("")
         self.step2_volume_entry.delete(0, tk.END)
         self.step2_volume_entry.insert(0, "1.0")
 
@@ -1151,10 +1443,10 @@ class SoundboardGUI:
         self.show_wizard_step(1)
 
     def seconds_to_mmss(self, seconds: float) -> str:
-        """Convert seconds to MM:SS format"""
+        """Convert seconds to MM:SS.milliseconds format"""
         minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        return f"{minutes}:{secs:02d}"
+        remaining_seconds = seconds % 60
+        return f"{minutes}:{remaining_seconds:06.3f}"
 
     def create_sound_management_tab(self):
         """Create sound management tab"""

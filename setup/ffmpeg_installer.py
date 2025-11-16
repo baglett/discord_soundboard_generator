@@ -29,7 +29,15 @@ class FFmpegInstaller:
             project_root: Path to the project root directory
         """
         self.project_root = project_root
-        self.ffmpeg_dir = project_root / "ffmpeg"
+
+        # Check if running as a PyInstaller bundle
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running as PyInstaller bundle - FFmpeg is in _internal/ffmpeg
+            self.ffmpeg_dir = Path(sys._MEIPASS) / "ffmpeg"
+        else:
+            # Running as normal Python script
+            self.ffmpeg_dir = project_root / "ffmpeg"
+
         self.platform = platform.system()
 
     def is_ffmpeg_installed(self) -> bool:

@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(python:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "WebSearch",
+      "Bash(nul)",
+      "Bash(del __pycache__instagram_scraper.cpython-313.pyc)"
     ],
     "deny": [],
     "ask": []

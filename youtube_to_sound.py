@@ -64,9 +64,9 @@ class YouTubeToSound:
         Parse timestamp string to milliseconds
 
         Supports formats:
-        - "MM:SS" (e.g., "1:30")
-        - "HH:MM:SS" (e.g., "1:23:45")
-        - "SS" (e.g., "90")
+        - "MM:SS.mmm" (e.g., "1:30.500" or "1:30")
+        - "HH:MM:SS.mmm" (e.g., "1:23:45.123" or "1:23:45")
+        - "SS.mmm" (e.g., "90.500" or "90")
 
         Args:
             timestamp (str): Timestamp string
@@ -79,28 +79,31 @@ class YouTubeToSound:
         """
         timestamp = timestamp.strip()
 
-        # Try HH:MM:SS format
+        # Try HH:MM:SS or HH:MM:SS.mmm format
         if timestamp.count(':') == 2:
-            match = re.match(r'^(\d+):(\d+):(\d+)$', timestamp)
+            match = re.match(r'^(\d+):(\d+):(\d+(?:\.\d+)?)$', timestamp)
             if match:
-                hours, minutes, seconds = map(int, match.groups())
-                return (hours * 3600 + minutes * 60 + seconds) * 1000
+                hours = int(match.group(1))
+                minutes = int(match.group(2))
+                seconds = float(match.group(3))
+                return int((hours * 3600 + minutes * 60 + seconds) * 1000)
 
-        # Try MM:SS format
+        # Try MM:SS or MM:SS.mmm format
         elif timestamp.count(':') == 1:
-            match = re.match(r'^(\d+):(\d+)$', timestamp)
+            match = re.match(r'^(\d+):(\d+(?:\.\d+)?)$', timestamp)
             if match:
-                minutes, seconds = map(int, match.groups())
-                return (minutes * 60 + seconds) * 1000
+                minutes = int(match.group(1))
+                seconds = float(match.group(2))
+                return int((minutes * 60 + seconds) * 1000)
 
-        # Try seconds only
+        # Try seconds only (SS or SS.mmm)
         else:
-            match = re.match(r'^(\d+)$', timestamp)
+            match = re.match(r'^(\d+(?:\.\d+)?)$', timestamp)
             if match:
-                seconds = int(match.group(1))
-                return seconds * 1000
+                seconds = float(match.group(1))
+                return int(seconds * 1000)
 
-        raise ValueError(f"Invalid timestamp format: {timestamp}. Use MM:SS or HH:MM:SS or SS")
+        raise ValueError(f"Invalid timestamp format: {timestamp}. Use MM:SS or HH:MM:SS or SS (decimals supported)")
 
     def _validate_youtube_url(self, youtube_url: str) -> None:
         """
