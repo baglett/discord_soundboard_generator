@@ -63,20 +63,24 @@ class InstagramScraper:
 
     def detect_url_platform(self, url: str) -> Optional[str]:
         """
-        Detect if URL is from YouTube or Instagram
+        Detect if URL is from YouTube, Instagram, or Facebook
 
         Args:
             url: URL string to check
 
         Returns:
-            "youtube", "instagram", or None if unrecognized
+            "youtube", "instagram", "facebook", or None if unrecognized
         """
         if not url:
             return None
 
         url = url.strip().lower()
 
-        # Check Instagram first
+        # Check Facebook first
+        if 'facebook.com' in url or 'fb.watch' in url:
+            return "facebook"
+
+        # Check Instagram
         if 'instagram.com' in url:
             is_valid, _ = self.validate_instagram_url(url)
             if is_valid:

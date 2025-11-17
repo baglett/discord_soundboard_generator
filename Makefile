@@ -58,4 +58,4 @@ version:
 	fi
 
 release:
-	@$(PYTHON) -c "v = open('.version').read().strip(); import os; os.system(f'powershell Compress-Archive -Path distributions/DiscordSoundboardGenerator_v{v} -DestinationPath distributions/DiscordSoundboardGenerator_v{v}.zip -Force'); os.system(f'git tag -a v{v} -m \"Discord Soundboard Generator v{v}\"'); os.system(f'git push origin v{v}'); os.system(f'gh release create v{v} --title \"Discord Soundboard Generator v{v}\" --notes \"Release v{v}\" distributions/DiscordSoundboardGenerator_v{v}.zip')"
+	@$(PYTHON) -c "v = open('.version').read().strip(); import os; os.system(f'powershell Compress-Archive -Path .\\distributions\\DiscordSoundboardGenerator_v{v} -DestinationPath .\\distributions\\DiscordSoundboardGenerator_v{v}.zip -Force'); os.system(f'git tag -a v{v} -m \"Discord Soundboard Generator v{v}\" 2>nul || echo Tag v{v} already exists'); os.system(f'git push origin v{v}'); os.system(f'gh release create v{v} --title \"Discord Soundboard Generator v{v}\" --notes \"Release v{v}\" .\\distributions\\DiscordSoundboardGenerator_v{v}.zip')"

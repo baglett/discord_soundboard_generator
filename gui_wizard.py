@@ -115,13 +115,13 @@ class SoundboardGUI:
         # Audio state
         self.preview_audio_path = None
         self.downloaded_audio_path = None
-        self.source_mode = tk.StringVar(value="online")  # "online" (YouTube/Instagram) or "local"
+        self.source_mode = tk.StringVar(value="online")  # "online" (YouTube/Instagram/Facebook) or "local"
         self.selected_local_file = None
-        self.detected_platform = None  # "youtube" or "instagram"
-        self.instagram_carousel_items = []  # For multi-slide Instagram posts
+        self.detected_platform = None  # "youtube", "instagram", or "facebook"
+        self.instagram_carousel_items = []  # For multi-slide Instagram posts (Facebook reels don't have carousels)
         self.selected_carousel_index = None  # Which slide user selected
 
-        # Audio trim slider state (unified for both YouTube and local)
+        # Audio trim slider state (unified for YouTube/Instagram/Facebook and local)
         self.audio_duration = 0.0  # Total duration in seconds
         self.trim_start = tk.DoubleVar(value=0.0)
         self.trim_end = tk.DoubleVar(value=5.2)
@@ -294,19 +294,19 @@ class SoundboardGUI:
 
         row = 0
 
-        # Source mode selection (YouTube/Instagram vs Local)
+        # Source mode selection (YouTube/Instagram/Facebook vs Local)
         ttk.Label(content, text="Source:").grid(row=row, column=0, sticky=tk.W, pady=5)
         source_frame = ttk.Frame(content)
         source_frame.grid(row=row, column=1, columnspan=2, sticky=tk.W, pady=5, padx=(10, 0))
 
-        ttk.Radiobutton(source_frame, text="YouTube / Instagram", variable=self.source_mode,
+        ttk.Radiobutton(source_frame, text="YouTube / Instagram / Facebook", variable=self.source_mode,
                        value="online", command=self.on_step1_source_changed).pack(side=tk.LEFT, padx=(0, 20))
         ttk.Radiobutton(source_frame, text="Local File", variable=self.source_mode,
                        value="local", command=self.on_step1_source_changed).pack(side=tk.LEFT)
 
         row += 1
 
-        # Online source-specific fields (YouTube/Instagram)
+        # Online source-specific fields (YouTube/Instagram/Facebook)
         self.step1_youtube_frame = ttk.Frame(content)
         self.step1_youtube_frame.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=10)
 
@@ -315,7 +315,7 @@ class SoundboardGUI:
         self.step1_youtube_url_entry.grid(row=0, column=1, columnspan=2, sticky=tk.EW, pady=5, padx=(10, 0))
         self.step1_youtube_url_entry.insert(0, "https://www.youtube.com/watch?v=xvFZjo5PgG0")
 
-        hint_label = ttk.Label(self.step1_youtube_frame, text="Paste YouTube or Instagram URL (video, reel, or post)",
+        hint_label = ttk.Label(self.step1_youtube_frame, text="Paste YouTube, Instagram, or Facebook URL (video, reel, or post)",
                               font=('Arial', 8), foreground='gray')
         hint_label.grid(row=0, column=1, columnspan=2, sticky=tk.W, pady=(35, 0), padx=(10, 0))
 
@@ -372,7 +372,7 @@ class SoundboardGUI:
         ttk.Button(nav_frame, text="Next →", command=self.wizard_go_to_step2,
                   style='Action.TButton').pack(side=tk.RIGHT)
 
-        # Initialize with YouTube mode
+        # Initialize with online mode (YouTube/Instagram/Facebook)
         self.on_step1_source_changed()
 
     def create_wizard_step2(self):
@@ -403,9 +403,9 @@ class SoundboardGUI:
 
         row += 1
 
-        # YouTube Video Info Frame (only shown for YouTube mode)
-        self.step2_youtube_video_frame = ttk.LabelFrame(content, text="YouTube Video", padding=15)
-        # Don't grid it yet, will be shown when YouTube video is loaded
+        # Video Info Frame (only shown for YouTube mode)
+        self.step2_youtube_video_frame = ttk.LabelFrame(content, text="Video Info", padding=15)
+        # Don't grid it yet, will be shown when video is loaded
 
         # Video thumbnail and info
         video_info_container = ttk.Frame(self.step2_youtube_video_frame)
@@ -597,7 +597,7 @@ class SoundboardGUI:
         mode = self.source_mode.get()
 
         if mode == "online":
-            # Show online source frame (YouTube/Instagram), hide local frame
+            # Show online source frame (YouTube/Instagram/Facebook), hide local frame
             self.step1_youtube_frame.grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=10)
             self.step1_local_frame.grid_forget()
         else:  # local
@@ -669,16 +669,17 @@ class SoundboardGUI:
                 messagebox.showerror("Error", "Please enter a video URL")
                 return
 
-            # Detect platform (YouTube or Instagram)
+            # Detect platform (YouTube, Instagram, or Facebook)
             from instagram_scraper import InstagramScraper
             instagram_scraper = InstagramScraper(None)  # Only need for URL detection
             self.detected_platform = instagram_scraper.detect_url_platform(online_url)
 
             if not self.detected_platform:
                 messagebox.showerror("Error",
-                    "URL not recognized. Please enter a valid YouTube or Instagram URL.\n\n" +
+                    "URL not recognized. Please enter a valid YouTube, Instagram, or Facebook URL.\n\n" +
                     "YouTube: youtube.com/watch?v=... or youtu.be/...\n" +
-                    "Instagram: instagram.com/p/... or instagram.com/reel/...")
+                    "Instagram: instagram.com/p/... or instagram.com/reel/...\n" +
+                    "Facebook: facebook.com/share/r/... or facebook.com/reel/...")
                 return
         else:  # local
             if not self.selected_local_file:
@@ -707,6 +708,8 @@ class SoundboardGUI:
                 self.step2_load_youtube_info()
             elif self.detected_platform == "instagram":
                 self.step2_load_instagram_info()
+            elif self.detected_platform == "facebook":
+                self.step2_load_facebook_info()
         else:
             self.step2_load_local_audio_info()
 
@@ -992,6 +995,88 @@ class SoundboardGUI:
                 text=error_msg, foreground='red'))
             self.root.after(0, lambda err=error_obj: self.show_error("Instagram Download Error", error_msg, err))
 
+    def step2_load_facebook_info(self):
+        """Load Facebook reel information and setup audio download"""
+        def load():
+            try:
+                from facebook_scraper import FacebookScraper
+                from pydub import AudioSegment
+                import re
+
+                facebook_url = self.step1_youtube_url_entry.get().strip()
+                sound_name = self.step1_sound_name_entry.get().strip()
+
+                self.root.after(0, lambda: self.step2_audio_info_label.config(
+                    text="Loading Facebook reel info...", foreground='blue'))
+
+                # Initialize Facebook scraper
+                ffmpeg_path = self.youtube_converter.ffmpeg_path if hasattr(self.youtube_converter, 'ffmpeg_path') else None
+                facebook_scraper = FacebookScraper(self.soundboard, ffmpeg_path)
+
+                # Validate URL
+                is_valid, error_msg = facebook_scraper.validate_facebook_url(facebook_url)
+                if not is_valid:
+                    raise Exception(error_msg)
+
+                # Get reel info
+                reel_info = facebook_scraper.get_reel_info(facebook_url)
+
+                if not reel_info['has_audio']:
+                    raise Exception("This Facebook reel does not have audio")
+
+                # Download audio directly (no carousel for Facebook reels)
+                self.root.after(0, lambda: self.step2_audio_info_label.config(
+                    text="Downloading audio from Facebook reel...", foreground='blue'))
+
+                # Create safe filename
+                safe_filename = re.sub(r'[^\w\s-]', '', sound_name).strip().replace(' ', '_')
+
+                # Download audio
+                downloaded_path = facebook_scraper.download_audio(facebook_url, safe_filename)
+
+                # Store path
+                self.downloaded_audio_path = downloaded_path
+                self.loaded_audio_path = downloaded_path
+
+                # Get actual duration
+                audio = AudioSegment.from_file(downloaded_path)
+                actual_duration_seconds = len(audio) / 1000.0
+                self.audio_duration = actual_duration_seconds
+
+                def update_ui():
+                    # Update info label
+                    self.step2_audio_info_label.config(
+                        text=f"✓ Audio loaded from Facebook ({actual_duration_seconds:.2f}s total)",
+                        foreground='green'
+                    )
+
+                    # Configure sliders
+                    self.step2_start_slider.config(from_=0, to=actual_duration_seconds, state=tk.NORMAL)
+                    self.step2_end_slider.config(from_=0, to=actual_duration_seconds, state=tk.NORMAL)
+
+                    # Set initial values
+                    initial_end = min(actual_duration_seconds, 5.2)
+                    self.trim_start.set(0.0)
+                    self.trim_end.set(initial_end)
+
+                    # Update labels
+                    self.step2_update_trim_labels()
+
+                    # Enable generate preview button
+                    self.step2_generate_preview_btn.config(state=tk.NORMAL)
+
+                self.root.after(0, update_ui)
+
+            except Exception as e:
+                error_msg = f"Failed to load Facebook reel: {str(e)}"
+                error_obj = e  # Capture in local scope
+                self.root.after(0, lambda: self.step2_audio_info_label.config(
+                    text=error_msg, foreground='red'))
+                self.root.after(0, lambda err=error_obj: self.show_error("Facebook Load Error", error_msg, err))
+
+        thread = threading.Thread(target=load, daemon=True)
+        thread.start()
+
     def step2_load_local_audio_info(self):
         """Load local audio file information and setup trim sliders"""
         try:
@@ -1107,12 +1192,12 @@ class SoundboardGUI:
         mode = self.source_mode.get()
 
         if mode == "online":
-            self.step2_generate_preview_youtube()  # Works for both YouTube and Instagram
+            self.step2_generate_preview_youtube()  # Works for YouTube/Instagram/Facebook
         else:
             self.step2_generate_preview_local()
 
     def step2_generate_preview_youtube(self):
-        """Generate preview from YouTube (using already-downloaded audio)"""
+        """Generate preview from online source (using already-downloaded audio)"""
         def create():
             try:
                 sound_name = self.step1_sound_name_entry.get().strip()
