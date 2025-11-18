@@ -5,7 +5,8 @@
       "Bash(findstr:*)",
       "WebSearch",
       "Bash(nul)",
-      "Bash(del __pycache__instagram_scraper.cpython-313.pyc)"
+      "Bash(del __pycache__instagram_scraper.cpython-313.pyc)",
+      "Bash(dir L:ProjectsReposdiscord_soundboard_generatordistributions 2)"
     ],
     "deny": [],
     "ask": []

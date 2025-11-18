@@ -288,21 +288,31 @@ class SoundboardGUI:
 
         # Start time slider
         ttk.Label(yt_trim_frame, text="Start:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
-        self.yt_start_slider = tk.Scale(yt_trim_frame, from_=0, to=5.2, resolution=0.1,
+        self.yt_start_slider = tk.Scale(yt_trim_frame, from_=0, to=5.2, resolution=0.01,
                                         orient=tk.HORIZONTAL, variable=self.yt_trim_start,
                                         command=self.on_yt_trim_slider_changed, state=tk.DISABLED)
         self.yt_start_slider.grid(row=0, column=1, sticky=tk.EW, padx=5)
         self.yt_start_time_label = ttk.Label(yt_trim_frame, text="0.0s", width=8)
         self.yt_start_time_label.grid(row=0, column=2, sticky=tk.W, padx=(5, 0))
+        self.yt_start_time_entry_field = ttk.Entry(yt_trim_frame, width=8)
+        self.yt_start_time_entry_field.grid(row=0, column=3, sticky=tk.W, padx=(5, 0))
+        self.yt_start_time_entry_field.insert(0, "0.0")
+        self.yt_start_time_entry_field.bind('<Return>', self.on_yt_trim_entry_changed)
+        self.yt_start_time_entry_field.bind('<FocusOut>', self.on_yt_trim_entry_changed)
 
         # End time slider
         ttk.Label(yt_trim_frame, text="End:").grid(row=1, column=0, sticky=tk.W, padx=(0, 5))
-        self.yt_end_slider = tk.Scale(yt_trim_frame, from_=0, to=5.2, resolution=0.1,
+        self.yt_end_slider = tk.Scale(yt_trim_frame, from_=0, to=5.2, resolution=0.01,
                                       orient=tk.HORIZONTAL, variable=self.yt_trim_end,
                                       command=self.on_yt_trim_slider_changed, state=tk.DISABLED)
         self.yt_end_slider.grid(row=1, column=1, sticky=tk.EW, padx=5)
         self.yt_end_time_label = ttk.Label(yt_trim_frame, text="5.2s", width=8)
         self.yt_end_time_label.grid(row=1, column=2, sticky=tk.W, padx=(5, 0))
+        self.yt_end_time_entry_field = ttk.Entry(yt_trim_frame, width=8)
+        self.yt_end_time_entry_field.grid(row=1, column=3, sticky=tk.W, padx=(5, 0))
+        self.yt_end_time_entry_field.insert(0, "5.2")
+        self.yt_end_time_entry_field.bind('<Return>', self.on_yt_trim_entry_changed)
+        self.yt_end_time_entry_field.bind('<FocusOut>', self.on_yt_trim_entry_changed)
 
         # Duration display
         self.yt_duration_label = ttk.Label(yt_trim_frame, text="Duration: 5.2s",
@@ -376,21 +386,31 @@ class SoundboardGUI:
 
         # Start time slider
         ttk.Label(trim_frame, text="Start:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
-        self.start_slider = tk.Scale(trim_frame, from_=0, to=5.2, resolution=0.1,
+        self.start_slider = tk.Scale(trim_frame, from_=0, to=5.2, resolution=0.01,
                                      orient=tk.HORIZONTAL, variable=self.trim_start,
                                      command=self.on_trim_slider_changed, state=tk.DISABLED)
         self.start_slider.grid(row=0, column=1, sticky=tk.EW, padx=5)
         self.start_time_label = ttk.Label(trim_frame, text="0.0s", width=8)
         self.start_time_label.grid(row=0, column=2, sticky=tk.W, padx=(5, 0))
+        self.start_time_entry_field = ttk.Entry(trim_frame, width=8)
+        self.start_time_entry_field.grid(row=0, column=3, sticky=tk.W, padx=(5, 0))
+        self.start_time_entry_field.insert(0, "0.0")
+        self.start_time_entry_field.bind('<Return>', self.on_trim_entry_changed)
+        self.start_time_entry_field.bind('<FocusOut>', self.on_trim_entry_changed)
 
         # End time slider
         ttk.Label(trim_frame, text="End:").grid(row=1, column=0, sticky=tk.W, padx=(0, 5))
-        self.end_slider = tk.Scale(trim_frame, from_=0, to=5.2, resolution=0.1,
+        self.end_slider = tk.Scale(trim_frame, from_=0, to=5.2, resolution=0.01,
                                    orient=tk.HORIZONTAL, variable=self.trim_end,
                                    command=self.on_trim_slider_changed, state=tk.DISABLED)
         self.end_slider.grid(row=1, column=1, sticky=tk.EW, padx=5)
         self.end_time_label = ttk.Label(trim_frame, text="5.2s", width=8)
         self.end_time_label.grid(row=1, column=2, sticky=tk.W, padx=(5, 0))
+        self.end_time_entry_field = ttk.Entry(trim_frame, width=8)
+        self.end_time_entry_field.grid(row=1, column=3, sticky=tk.W, padx=(5, 0))
+        self.end_time_entry_field.insert(0, "5.2")
+        self.end_time_entry_field.bind('<Return>', self.on_trim_entry_changed)
+        self.end_time_entry_field.bind('<FocusOut>', self.on_trim_entry_changed)
 
         # Duration display
         self.duration_label = ttk.Label(trim_frame, text="Duration: 5.2s",
@@ -757,6 +777,10 @@ class SoundboardGUI:
             self.start_slider.config(from_=0, to=max_end, state=tk.NORMAL)
             self.end_slider.config(from_=0, to=max_end, state=tk.NORMAL)
 
+            # Enable entry fields
+            self.start_time_entry_field.config(state=tk.NORMAL)
+            self.end_time_entry_field.config(state=tk.NORMAL)
+
             # Set initial values (try to select first 5.2s or whole file if shorter)
             self.trim_start.set(0.0)
             self.trim_end.set(max_end)
@@ -771,6 +795,8 @@ class SoundboardGUI:
             )
             self.start_slider.config(state=tk.DISABLED)
             self.end_slider.config(state=tk.DISABLED)
+            self.start_time_entry_field.config(state=tk.DISABLED)
+            self.end_time_entry_field.config(state=tk.DISABLED)
 
     def on_trim_slider_changed(self, value=None):
         """Handle trim slider changes - enforce constraints"""
@@ -832,9 +858,15 @@ class SoundboardGUI:
         end = self.trim_end.get()
         duration = end - start
 
-        self.start_time_label.config(text=f"{start:.1f}s")
-        self.end_time_label.config(text=f"{end:.1f}s")
-        self.duration_label.config(text=f"Duration: {duration:.1f}s")
+        self.start_time_label.config(text=f"{start:.2f}s")
+        self.end_time_label.config(text=f"{end:.2f}s")
+        self.duration_label.config(text=f"Duration: {duration:.2f}s")
+
+        # Update entry fields to match sliders
+        self.start_time_entry_field.delete(0, tk.END)
+        self.start_time_entry_field.insert(0, f"{start:.2f}")
+        self.end_time_entry_field.delete(0, tk.END)
+        self.end_time_entry_field.insert(0, f"{end:.2f}")
 
         # Color code duration based on validity
         if duration < 1.0:
@@ -843,6 +875,31 @@ class SoundboardGUI:
             self.duration_label.config(foreground='orange')
         else:
             self.duration_label.config(foreground='green')
+
+    def on_trim_entry_changed(self, event=None):
+        """Handle when user types in the trim entry fields"""
+        try:
+            # Get values from entry fields
+            start_text = self.start_time_entry_field.get().strip()
+            end_text = self.end_time_entry_field.get().strip()
+
+            # Parse the values
+            start_val = float(start_text)
+            end_val = float(end_text)
+
+            # Validate ranges
+            if start_val < 0:
+                start_val = 0
+            if end_val > self.audio_duration:
+                end_val = self.audio_duration
+
+            # Update the slider variables (this will trigger on_trim_slider_changed)
+            self.trim_start.set(start_val)
+            self.trim_end.set(end_val)
+
+        except ValueError:
+            # Invalid input, revert to slider values
+            self.update_trim_labels()
 
     def load_youtube_video_info(self):
         """Load YouTube video information and setup trim sliders"""
@@ -878,6 +935,10 @@ class SoundboardGUI:
                     # The slider range should be the full video, but selection is constrained to 5.2s
                     self.yt_start_slider.config(from_=0, to=duration_seconds, state=tk.NORMAL)
                     self.yt_end_slider.config(from_=0, to=duration_seconds, state=tk.NORMAL)
+
+                    # Enable entry fields
+                    self.yt_start_time_entry_field.config(state=tk.NORMAL)
+                    self.yt_end_time_entry_field.config(state=tk.NORMAL)
 
                     # Set initial values - select first 5.2s (or whole video if shorter)
                     initial_end = min(duration_seconds, 5.2)
@@ -951,9 +1012,15 @@ class SoundboardGUI:
         end = self.yt_trim_end.get()
         duration = end - start
 
-        self.yt_start_time_label.config(text=f"{start:.1f}s")
-        self.yt_end_time_label.config(text=f"{end:.1f}s")
-        self.yt_duration_label.config(text=f"Duration: {duration:.1f}s")
+        self.yt_start_time_label.config(text=f"{start:.2f}s")
+        self.yt_end_time_label.config(text=f"{end:.2f}s")
+        self.yt_duration_label.config(text=f"Duration: {duration:.2f}s")
+
+        # Update entry fields to match sliders
+        self.yt_start_time_entry_field.delete(0, tk.END)
+        self.yt_start_time_entry_field.insert(0, f"{start:.2f}")
+        self.yt_end_time_entry_field.delete(0, tk.END)
+        self.yt_end_time_entry_field.insert(0, f"{end:.2f}")
 
         # Color code duration based on validity
         if duration < 1.0:
@@ -962,6 +1029,31 @@ class SoundboardGUI:
             self.yt_duration_label.config(foreground='orange')
         else:
             self.yt_duration_label.config(foreground='green')
+
+    def on_yt_trim_entry_changed(self, event=None):
+        """Handle when user types in the YouTube trim entry fields"""
+        try:
+            # Get values from entry fields
+            start_text = self.yt_start_time_entry_field.get().strip()
+            end_text = self.yt_end_time_entry_field.get().strip()
+
+            # Parse the values
+            start_val = float(start_text)
+            end_val = float(end_text)
+
+            # Validate ranges
+            if start_val < 0:
+                start_val = 0
+            if end_val > self.yt_audio_duration:
+                end_val = self.yt_audio_duration
+
+            # Update the slider variables (this will trigger on_yt_trim_slider_changed)
+            self.yt_trim_start.set(start_val)
+            self.yt_trim_end.set(end_val)
+
+        except ValueError:
+            # Invalid input, revert to slider values
+            self.update_yt_trim_labels()
 
     def open_youtube_preview(self):
         """Open YouTube video in web browser with start time"""
